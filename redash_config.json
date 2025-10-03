@@ -1,0 +1,46 @@
+{
+  "data_source": {
+    "name": "Selectel Billing DB",
+    "type": "pg",
+    "description": "База данных биллинга Selectel"
+  },
+  "queries": [
+    {
+      "name": "Отчеты по проектам",
+      "description": "Расходы по проектам за текущий год с разбивкой по месяцам и типам балансов",
+      "sql": "SELECT \n    year,\n    month,\n    project_name,\n    balance_type,\n    value/100 as sum,\n    fetched_at\nFROM project_reports \nWHERE year = EXTRACT(YEAR FROM CURRENT_DATE)\nORDER BY year DESC, month DESC, value DESC;",
+      "tags": ["projects", "expenses", "current_year"]
+    },
+    {
+      "name": "Прогнозы расходов",
+      "description": "Прогнозы в днях до исчерпания баланса по типам балансов",
+      "sql": "SELECT\n    balance_type,\n    predicted_amount/24 as days,\n    fetched_at\nFROM predictions \nWHERE fetched_at = (SELECT MAX(fetched_at) FROM predictions)\nORDER BY predicted_amount DESC;",
+      "tags": ["predictions", "forecast", "days"]
+    },
+    {
+      "name": "Транзакции по услугам",
+      "description": "Расходы по услугам с группировкой по месяцам",
+      "sql": "SELECT\n    DATE_TRUNC('month', created)::date AS month,\n    service,\n    SUM(ABS(price))/100 AS total_spent\nFROM transactions\nWHERE price < 0\nGROUP BY month, service\nORDER BY month, service;",
+      "tags": ["transactions", "services", "monthly"]
+    },
+    {
+      "name": "Текущий баланс",
+      "description": "Общий баланс на последнюю дату обновления",
+      "sql": "WITH t AS (\n  SELECT\n    amount,\n    date_trunc('minute', fetched_at) AS fetched_min\n  FROM balances\n),\nmax_minute AS (\n  SELECT MAX(fetched_min) AS fetched_min\n  FROM (\n    SELECT fetched_min\n    FROM t\n    GROUP BY fetched_min\n    HAVING COUNT(*) > 1\n  ) dups\n)\nSELECT \n    t.fetched_min,\n    SUM(t.amount)/100 AS total_amount\nFROM t\nJOIN max_minute m ON t.fetched_min = m.fetched_min\nGROUP BY t.fetched_min;",
+      "tags": ["balance", "current", "total"]
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "Selectel Billing - Основной",
+      "description": "Основной дашборд с ключевыми метриками биллинга",
+      "tags": ["main", "overview"],
+      "queries": [
+        "Текущий баланс",
+        "Прогнозы расходов",
+        "Отчеты по проектам",
+        "Транзакции по услугам"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,715 @@
+openapi: 3.0.3
+info:
+  title: Selectel Billing API
+  description: |
+    API для получения данных о биллинге Selectel, используемый в ETL системе.
+    
+    Этот документ описывает эндпоинты Selectel API, которые используются для:
+    - Получения информации о балансах
+    - Получения прогнозов расходов
+    - Получения истории транзакций
+    - Получения отчетов по проектам
+    
+    ## Аутентификация
+    Все запросы требуют передачи API токена в заголовке `X-Token`.
+    
+    ## Базовый URL
+    `https://api.selectel.ru`
+    
+  version: 1.0.0
+  contact:
+    name: Selectel Support
+    url: https://selectel.ru
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.selectel.ru
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /v3/balances:
+    get:
+      summary: Получить информацию о балансах
+      description: |
+        Возвращает текущую информацию о балансах аккаунта, включая:
+        - Основной баланс
+        - Бонусный баланс
+        - Кредитные лимиты
+        - Статусы балансов
+      tags:
+        - Balances
+      responses:
+        '200':
+          description: Успешный ответ с информацией о балансах
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalancesResponse'
+              example:
+                status: success
+                data:
+                  billings:
+                    - balances:
+                        - balance_id: "12345"
+                          balance_type: "main"
+                          value: 150000
+                        - balance_id: "12346"
+                          balance_type: "bonus"
+                          value: 25000
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v2/billing/prediction:
+    get:
+      summary: Получить прогнозы расходов
+      description: |
+        Возвращает прогнозируемые расходы по различным типам балансов:
+        - primary - основной баланс
+        - storage - хранилище
+        - vmware - VMware услуги
+        - vpc - VPC услуги
+      tags:
+        - Predictions
+      responses:
+        '200':
+          description: Успешный ответ с прогнозами расходов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse'
+              example:
+                status: success
+                data:
+                  primary: 45000.50
+                  storage: null
+                  vmware: null
+                  vpc: null
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v2/billing/transactions:
+    get:
+      summary: Получить историю транзакций
+      description: |
+        Возвращает список транзакций за указанный период.
+        Поддерживает фильтрацию по дате создания, типам балансов и другим параметрам.
+      tags:
+        - Transactions
+      parameters:
+        - name: created_from
+          in: query
+          required: true
+          description: Начальная дата периода (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-09-01T00:00:00"
+        - name: created_to
+          in: query
+          required: true
+          description: Конечная дата периода (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-09-11T23:59:59"
+        - name: balances
+          in: query
+          required: false
+          description: Типы балансов (через запятую)
+          schema:
+            type: string
+          example: "main,vk_rub,bonus"
+        - name: offset
+          in: query
+          required: false
+          description: Смещение для пагинации
+          schema:
+            type: integer
+            minimum: 0
+          example: 0
+        - name: limit
+          in: query
+          required: true
+          description: Количество записей на страницу
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+          example: 500
+        - name: without_removed
+          in: query
+          required: false
+          description: Исключить удаленные транзакции
+          schema:
+            type: boolean
+          example: true
+      responses:
+        '200':
+          description: Успешный ответ со списком транзакций
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '400':
+          description: Некорректные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "Missing required parameter: limit"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/billing/report/by_project/detailed:
+    get:
+      summary: Получить детальный отчет по проектам
+      description: |
+        Возвращает детальную информацию о расходах по проектам за указанный месяц.
+        Включает разбивку по продуктам, объектам и ресурсам.
+      tags:
+        - Project Reports
+      parameters:
+        - name: year
+          in: query
+          required: true
+          description: Год отчета
+          schema:
+            type: integer
+            minimum: 2020
+            maximum: 2030
+          example: 2025
+        - name: month
+          in: query
+          required: true
+          description: Месяц отчета (1-12)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          example: 8
+        - name: locale
+          in: query
+          required: false
+          description: Локаль для названий
+          schema:
+            type: string
+            enum: [ru, en]
+          example: "ru"
+      responses:
+        '200':
+          description: Успешный ответ с отчетом по проектам
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectReportResponse'
+        '400':
+          description: Некорректные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Token
+      description: API токен для аутентификации
+
+  schemas:
+    BalancesResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            billings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Billing'
+
+    Billing:
+      type: object
+      properties:
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/Balance'
+
+    Balance:
+      type: object
+      properties:
+        balance_id:
+          type: string
+          description: Идентификатор баланса
+          example: "12345"
+        balance_type:
+          type: string
+          description: Тип баланса
+          enum: [main, bonus, primary, storage, vmware, vpc]
+          example: "main"
+        value:
+          type: number
+          description: Значение баланса в копейках
+          example: 150000
+
+    PredictionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            primary:
+              type: number
+              nullable: true
+              description: Прогноз для основного баланса
+              example: 45000.50
+            storage:
+              type: number
+              nullable: true
+              description: Прогноз для хранилища
+              example: null
+            vmware:
+              type: number
+              nullable: true
+              description: Прогноз для VMware
+              example: null
+            vpc:
+              type: number
+              nullable: true
+              description: Прогноз для VPC
+              example: null
+
+    TransactionsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+
+    Transaction:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          description: ID пользователя
+          example: 56325
+        transaction_type:
+          type: string
+          description: Тип транзакции
+          enum: [withdraw, deposit]
+          example: "withdraw"
+        description:
+          $ref: '#/components/schemas/LocalizedText'
+        public_description:
+          $ref: '#/components/schemas/LocalizedText'
+        balance:
+          type: string
+          description: Тип баланса
+          enum: [main, bonus, vk_rub]
+          example: "bonus"
+        dir:
+          type: string
+          description: Направление транзакции
+          enum: [incoming, outgoing]
+          example: "outgoing"
+        created:
+          type: string
+          format: date-time
+          description: Дата создания транзакции
+          example: "2025-09-11T00:40:27.572253"
+        price:
+          type: number
+          description: Сумма транзакции (отрицательная для списаний)
+          example: -20943
+        state:
+          type: string
+          description: Статус транзакции
+          enum: [PAID, PENDING, CANCELLED]
+          example: "PAID"
+        id_meta:
+          $ref: '#/components/schemas/TransactionIdMeta'
+        transaction_group:
+          type: string
+          description: Группа транзакции
+          enum: [withdraw, deposit]
+          example: "withdraw"
+        server_meta:
+          $ref: '#/components/schemas/ServerMeta'
+        reason_for_debt:
+          type: string
+          nullable: true
+          description: Причина задолженности
+          example: null
+        date_payment_must_made:
+          type: string
+          nullable: true
+          format: date-time
+          description: Дата обязательного платежа
+          example: null
+        jurbrand_key:
+          type: string
+          description: Ключ юридического лица
+          example: "selectel_russia"
+
+    TransactionIdMeta:
+      type: object
+      properties:
+        id:
+          type: array
+          items:
+            type: integer
+          description: Массив идентификаторов транзакции
+          example: [687288652]
+        billing:
+          type: string
+          description: Тип биллинга
+          example: "primary"
+        service_id:
+          type: integer
+          nullable: true
+          description: ID сервиса
+          example: null
+        service_name:
+          type: string
+          description: Название сервиса
+          example: "Объектное S3 хранилище"
+        service_name_en:
+          type: string
+          description: Название сервиса на английском
+          example: "Object S3 Storage"
+
+    ServerMeta:
+      type: object
+      properties:
+        ru:
+          $ref: '#/components/schemas/ServerMetaLang'
+        en:
+          $ref: '#/components/schemas/ServerMetaLang'
+        main_resource_uuid:
+          type: string
+          description: UUID основного ресурса
+          example: ""
+        server_id:
+          type: integer
+          nullable: true
+          description: ID сервера
+          example: null
+        equip_id:
+          type: integer
+          nullable: true
+          description: ID оборудования
+          example: null
+        service_id:
+          type: integer
+          nullable: true
+          description: ID сервиса
+          example: null
+        service_type:
+          type: integer
+          description: Тип сервиса
+          example: 21
+        service_sub_type:
+          type: integer
+          description: Подтип сервиса
+          example: 1
+
+    ServerMetaLang:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: Описание операции
+          example: "Оплата услуги"
+        service:
+          type: string
+          description: Название сервиса
+          example: "Объектное S3 хранилище"
+        full_name:
+          type: string
+          description: Полное название операции
+          example: "Оплата услуги Объектное S3 хранилище"
+
+    LocalizedText:
+      type: object
+      properties:
+        ru:
+          type: string
+          description: Текст на русском языке
+          example: "Оплата услуги"
+        en:
+          type: string
+          description: Текст на английском языке
+          example: "Payment for service"
+
+    ProjectReportResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          $ref: '#/components/schemas/ProjectReportData'
+
+    ProjectReportData:
+      type: object
+      properties:
+        account_id:
+          type: integer
+          description: ID аккаунта
+          example: 56325
+        agreement_id:
+          type: integer
+          description: ID соглашения
+          example: 0
+        locale:
+          type: string
+          description: Локаль отчета
+          example: "ru"
+        project_ids:
+          type: array
+          items:
+            type: string
+          description: Список ID проектов
+          example: []
+        year:
+          type: integer
+          description: Год отчета
+          example: 2025
+        month:
+          type: integer
+          description: Месяц отчета
+          example: 8
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        value:
+          type: number
+          description: Общая сумма расходов
+          example: 62639068
+        paid_by_balance:
+          type: array
+          items:
+            $ref: '#/components/schemas/BalancePayment'
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID проекта
+          example: "038f673576ec46b2849a8bc3411d194e"
+        name:
+          type: string
+          description: Название проекта
+          example: "E-learn_"
+        paid_by_balance:
+          type: array
+          items:
+            $ref: '#/components/schemas/BalancePayment'
+        value:
+          type: number
+          description: Общая сумма расходов проекта
+          example: 36426
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: ID продукта
+          example: 21
+        name:
+          type: string
+          description: Название продукта
+          example: "S3"
+        paid_by_balance:
+          type: array
+          items:
+            $ref: '#/components/schemas/BalancePayment'
+        value:
+          type: number
+          description: Сумма расходов на продукт
+          example: 0
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductObject'
+
+    ProductObject:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID объекта
+          example: "7b78668c-d1d5-4d29-8d80-29805a13bb0e"
+        name:
+          type: string
+          description: Название объекта
+          example: "95.213.230.50"
+        type:
+          type: string
+          description: Тип объекта
+          example: "network_floatingips"
+        type_name:
+          type: string
+          description: Читаемое название типа
+          example: "Публичный IP"
+        service_name:
+          type: string
+          nullable: true
+          description: Название сервиса
+          example: null
+        paid_by_balance:
+          type: array
+          items:
+            $ref: '#/components/schemas/BalancePayment'
+        value:
+          type: number
+          description: Сумма расходов на объект
+          example: 18213
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductObject'
+          description: Вложенные объекты
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID ресурса
+          example: "network_floatingips"
+        name:
+          type: string
+          description: Название ресурса
+          example: "Публичные IP"
+        quantity:
+          type: number
+          description: Количество
+          example: 744
+        unit:
+          type: string
+          description: Единица измерения
+          example: "item"
+        unit_name:
+          type: string
+          description: Читаемое название единицы
+          example: "item"
+        paid_by_balance:
+          type: array
+          items:
+            $ref: '#/components/schemas/BalancePayment'
+        value:
+          type: number
+          description: Стоимость ресурса
+          example: 18213
+        provision_start:
+          type: string
+          format: date-time
+          description: Начало предоставления услуги
+          example: "2025-08-01T00:00:00"
+        provision_end:
+          type: string
+          format: date-time
+          description: Конец предоставления услуги
+          example: "2025-08-31T23:00:00"
+
+    BalancePayment:
+      type: object
+      properties:
+        balance:
+          type: string
+          description: Тип баланса
+          enum: [main, bonus]
+          example: "bonus"
+        value:
+          type: number
+          description: Сумма в копейках
+          example: 18213
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "error"
+        message:
+          type: string
+          description: Описание ошибки
+          example: "Invalid parameter value"
+        code:
+          type: string
+          description: Код ошибки
+          example: "INVALID_PARAMETER"
+
+  responses:
+    UnauthorizedError:
+      description: Ошибка аутентификации
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: "error"
+            message: "Invalid API token"
+            code: "UNAUTHORIZED"
+
+    InternalServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: "error"
+            message: "Internal server error"
+            code: "INTERNAL_ERROR"
+
+tags:
+  - name: Balances
+    description: Операции с балансами аккаунта
+  - name: Predictions
+    description: Прогнозы расходов
+  - name: Transactions
+    description: История транзакций
+  - name: Project Reports
+    description: Отчеты по проектам
